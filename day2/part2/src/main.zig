@@ -16,29 +16,33 @@ fn isLevelChangeSafe(previous: u32, value: u32, increasing: bool) bool {
     return true;
 }
 
-fn isSafeHelper(list: std.ArrayList(u32), increasing: bool, dampenerUsed: bool) bool {
-    var isDampenerUsed = dampenerUsed;
+fn isSafeHelper(list: std.ArrayList(u32), increasing: bool) bool {
     var previous: u32 = list.items[0];
     for (list.items[1..]) |value| {
-        if (!isLevelChangeSafe(previous, value, increasing)) {
-            if (isDampenerUsed) {
-                return false;
-            }
-            isDampenerUsed = true;
-        } else {
-            previous = value;
+        if (logicalXor(previous < value, increasing)) {
+            return false;
         }
+        const i32Value: i32 = @bitCast(value);
+        const i32Previous: i32 = @bitCast(previous);
+        if (@abs(i32Value - i32Previous) > 3 or i32Value - i32Previous == 0) {
+            return false;
+        }
+        previous = value;
     }
     return true;
 }
 
 fn isSafe(list: *std.ArrayList(u32)) !bool {
-    var isSafeBool: bool = isSafeHelper(list.*, false, false) or isSafeHelper(list.*, true, false);
-    const removed = list.items[0];
-    _ = list.orderedRemove(0);
-    isSafeBool = isSafeBool or isSafeHelper(list.*, false, true) or isSafeHelper(list.*, false, true);
-    try list.insert(0, removed);
-    return isSafeBool;
+    for (0..list.items.len) |index| {
+        const removed = list.items[index];
+        _ = list.orderedRemove(index);
+        if (isSafeHelper(list.*, true) or isSafeHelper(list.*, false)) {
+            try list.insert(index, removed);
+            return true;
+        }
+        try list.insert(index, removed);
+    }
+    return false;
 }
 
 pub fn main() !void {
@@ -85,4 +89,10 @@ pub fn main() !void {
     list.deinit();
 
     std.debug.print("{d}\n", .{count});
+}
+
+test "TestIsSafeHelper" {
+    var arr = [_]u32{ 76, 78, 77, 79, 82, 80 };
+    const list = std.ArrayList(u32).fromOwnedSlice(std.testing.allocator, &arr);
+    try std.testing.expect(!isSafeHelper(list, true));
 }
