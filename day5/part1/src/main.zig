@@ -14,46 +14,54 @@ fn print2DArray(array: []const []const i32) void {
     }
 }
 
-fn removeWhenContained(list: *std.ArrayList(i32), value: i32) void {
+fn contains(list: std.ArrayList(i32), value: i32) ?usize {
     for (0..list.items.len) |index| {
         if (list.items[index] == value) {
-            _ = list.swapRemove(index);
-            break;
+            return index;
+        }
+    }
+    return null;
+}
+
+fn removeWhenContained(list: *std.ArrayList(i32), value: i32) void {
+    if (contains(list.*, value)) |index| {
+        _ = list.swapRemove(index);
+    }
+}
+
+fn dfs(adjacencyMatrix: []const []const i32, node: i32, allowedNodes: std.ArrayList(i32), visited: *std.ArrayList(i32)) !void {
+    try visited.append(node);
+    const nodeUsize: usize = @intCast(node);
+    for (0..adjacencyMatrix[nodeUsize].len) |index| {
+        if (adjacencyMatrix[nodeUsize][index] >= 0) {
+            const indexI32: i32 = @intCast(index);
+            if (contains(allowedNodes, indexI32) != null and contains(visited.*, indexI32) == null) {
+                try dfs(adjacencyMatrix, indexI32, allowedNodes, visited);
+            }
         }
     }
 }
 
-fn areNodesReachable(adjacencyMatrix: []const []const i32, node: i32, toCheckNodes: *std.ArrayList(i32), visited: *[]bool) bool {
-    const nodeUsize: usize = @intCast(node);
-    visited.*[nodeUsize] = true;
-    for (0..adjacencyMatrix[nodeUsize].len) |index| {
-        if (adjacencyMatrix[nodeUsize][index] >= 0) {
-            const indexI32: i32 = @intCast(index);
-
-            removeWhenContained(toCheckNodes, indexI32);
-            if (toCheckNodes.items.len == 0) {
-                return true;
-            }
-            if (!visited.*[index] and areNodesReachable(adjacencyMatrix, indexI32, toCheckNodes, visited)) {
-                return true;
-            }
+fn areNodesReachable(adjacencyMatrix: []const []const i32, node: i32, allowedNodes: std.ArrayList(i32), toCheckNodes: *std.ArrayList(i32)) !bool {
+    var visited = std.ArrayList(i32).init(allocator);
+    try dfs(adjacencyMatrix, node, allowedNodes, &visited);
+    for (toCheckNodes.items) |toCheckNode| {
+        if (contains(visited, toCheckNode) == null) {
+            visited.deinit();
+            return false;
         }
     }
-    return false;
+    visited.deinit();
+    return true;
 }
 
 fn isUpdateCorrect(adjacencyMatrix: []const []const i32, update: *std.ArrayList(i32)) !bool {
     var areAllStepsCorrect = true;
+    const otherUpdateClone = try update.clone();
     while (update.items.len > 1) {
         const first = update.orderedRemove(0);
         var updateClone = try update.clone();
-        var visited = try allocator.alloc(bool, adjacencyMatrix.len);
-        @memset(visited, false);
-        if (!areNodesReachable(adjacencyMatrix, first, &updateClone, &visited)) {
-            std.debug.print("got false\n", .{});
-        }
-        areAllStepsCorrect = areAllStepsCorrect and areNodesReachable(adjacencyMatrix, first, &updateClone, &visited);
-        allocator.free(visited);
+        areAllStepsCorrect = areAllStepsCorrect and try areNodesReachable(adjacencyMatrix, first, otherUpdateClone, &updateClone);
     }
     return areAllStepsCorrect;
 }
@@ -125,10 +133,6 @@ pub fn main() !void {
     for (updates.items) |update| {
         var clonedUpdate = try update.clone();
         if (try isUpdateCorrect(adjacencyMatrix, &clonedUpdate)) {
-            for (update.items) |value| {
-                std.debug.print("{d},", .{value});
-            }
-            std.debug.print("\n", .{});
             result += update.items[update.items.len / 2];
         }
     }
